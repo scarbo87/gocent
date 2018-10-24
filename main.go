@@ -676,13 +676,9 @@ func (c *Client) send(cmds []Command) (Result, error) {
 }
 
 // Lock must be held outside this method.
+// Todo: in new version uuid return error
 func (c *Client) add(cmd Command) error {
-	uid, err := uuid.NewV4()
-	if err != nil {
-		return err
-	}
-
-	cmd.UID = uid.String()
+	cmd.UID = uuid.NewV4().String()
 	c.cmds = append(c.cmds, cmd)
 	return nil
 }
