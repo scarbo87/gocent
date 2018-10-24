@@ -129,10 +129,12 @@ func getTransport(transport *http.Transport) *http.Transport {
 		return transport
 	}
 
-	return &http.Transport{
-		MaxIdleConnsPerHost: 1024,
-		TLSHandshakeTimeout: 0 * time.Second,
-	}
+	defaultRoundTripper := http.DefaultTransport
+	defaultTransportPointer := defaultRoundTripper.(*http.Transport)
+	defaultTransport := *defaultTransportPointer // dereference it to get a copy of the struct that the pointer points to
+	defaultTransport.MaxIdleConns = 1024
+	defaultTransport.MaxIdleConnsPerHost = 1024
+	return &defaultTransport
 }
 
 // Reset allows to clear client command buffer.
