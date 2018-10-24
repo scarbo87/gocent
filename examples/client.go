@@ -2,16 +2,15 @@ package main
 
 import (
 	"fmt"
+	"github.com/scarbo87/gocent"
 	"time"
-
-	"github.com/centrifugal/gocent"
 )
 
 func main() {
 
 	ch := "$public:chat"
 
-	c := gocent.NewClient("http://localhost:8000", "secret", 5*time.Second)
+	c := gocent.NewClient("http://localhost:8000", "secret", 5*time.Second, nil)
 
 	// How to publish.
 	ok, err := c.Publish(ch, []byte(`{"input": "test"}`))

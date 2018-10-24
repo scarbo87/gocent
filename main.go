@@ -39,22 +39,21 @@
 //  result, err := c.Send()
 //  println("Sent", len(result), "publish commands in one request")
 //
-package gocent // import "github.com/centrifugal/gocent"
+package gocent // import "github.com/scarbo87/gocent"
 
 import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
+	json "github.com/json-iterator/go"
+	"github.com/satori/go.uuid"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/nu7hatch/gouuid"
 )
 
 var (
@@ -67,18 +66,19 @@ var (
 
 // Client is API client for project registered in server.
 type Client struct {
-	mu sync.RWMutex
-
 	Endpoint string
 	Secret   string
 	Timeout  time.Duration
+
+	mu       sync.RWMutex
 	cmds     []Command
 	insecure bool
+	client   *http.Client
 }
 
 // NewClient returns initialized client instance based on provided server address,
-//project key, project secret and timeout.
-func NewClient(addr, secret string, timeout time.Duration) *Client {
+//project key, project secret, timeout and http.Transport settings
+func NewClient(addr, secret string, timeout time.Duration, transport *http.Transport) *Client {
 
 	addr = strings.TrimRight(addr, "/")
 	if !strings.HasSuffix(addr, "/api") {
@@ -92,12 +92,17 @@ func NewClient(addr, secret string, timeout time.Duration) *Client {
 		Secret:   secret,
 		Timeout:  timeout,
 		cmds:     []Command{},
+
+		client: &http.Client{
+			Transport: getTransport(transport),
+			Timeout:   timeout,
+		},
 	}
 }
 
 // NewInsecureAPIClient allows to create client that won't sign every HTTP API request.
 // This is useful when your Centrifugo /api/ endpoint protected by firewall.
-func NewInsecureAPIClient(addr string, timeout time.Duration) *Client {
+func NewInsecureAPIClient(addr string, timeout time.Duration, transport *http.Transport) *Client {
 
 	addr = strings.TrimRight(addr, "/")
 	if !strings.HasSuffix(addr, "/api") {
@@ -111,31 +116,31 @@ func NewInsecureAPIClient(addr string, timeout time.Duration) *Client {
 		Timeout:  timeout,
 		cmds:     []Command{},
 		insecure: true,
+
+		client: &http.Client{
+			Transport: getTransport(transport),
+			Timeout:   timeout,
+		},
 	}
 }
 
-func (c *Client) empty() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.cmds) == 0
+func getTransport(transport *http.Transport) *http.Transport {
+	if transport != nil {
+		return transport
+	}
+
+	return &http.Transport{
+		MaxIdleConnsPerHost: 1024,
+		TLSHandshakeTimeout: 0 * time.Second,
+	}
 }
 
 // Reset allows to clear client command buffer.
 func (c *Client) Reset() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.cmds = []Command{}
-}
 
-// Lock must be held outside this method.
-func (c *Client) add(cmd Command) error {
-	uid, err := uuid.NewV4()
-	if err != nil {
-		return err
-	}
-	cmd.UID = uid.String()
-	c.cmds = append(c.cmds, cmd)
-	return nil
+	c.cmds = []Command{}
 }
 
 // AddPublish adds publish command to client command buffer but not actually
@@ -143,6 +148,7 @@ func (c *Client) add(cmd Command) error {
 func (c *Client) AddPublish(channel string, data []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	var raw json.RawMessage
 	raw = json.RawMessage(data)
 	cmd := Command{
@@ -160,6 +166,7 @@ func (c *Client) AddPublish(channel string, data []byte) error {
 func (c *Client) AddPublishClient(channel string, data []byte, client string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	var raw json.RawMessage
 	raw = json.RawMessage(data)
 	cmd := Command{
@@ -178,6 +185,7 @@ func (c *Client) AddPublishClient(channel string, data []byte, client string) er
 func (c *Client) AddBroadcast(channels []string, data []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	var raw json.RawMessage
 	raw = json.RawMessage(data)
 	cmd := Command{
@@ -195,6 +203,7 @@ func (c *Client) AddBroadcast(channels []string, data []byte) error {
 func (c *Client) AddBroadcastClient(channels []string, data []byte, client string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	var raw json.RawMessage
 	raw = json.RawMessage(data)
 	cmd := Command{
@@ -213,6 +222,7 @@ func (c *Client) AddBroadcastClient(channels []string, data []byte, client strin
 func (c *Client) AddUnsubscribe(channel string, user string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	cmd := Command{
 		Method: "unsubscribe",
 		Params: map[string]interface{}{
@@ -228,6 +238,7 @@ func (c *Client) AddUnsubscribe(channel string, user string) error {
 func (c *Client) AddDisconnect(user string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	cmd := Command{
 		Method: "disconnect",
 		Params: map[string]interface{}{
@@ -242,6 +253,7 @@ func (c *Client) AddDisconnect(user string) error {
 func (c *Client) AddPresence(channel string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	cmd := Command{
 		Method: "presence",
 		Params: map[string]interface{}{
@@ -256,6 +268,7 @@ func (c *Client) AddPresence(channel string) error {
 func (c *Client) AddHistory(channel string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	cmd := Command{
 		Method: "history",
 		Params: map[string]interface{}{
@@ -270,6 +283,7 @@ func (c *Client) AddHistory(channel string) error {
 func (c *Client) AddChannels() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	cmd := Command{
 		Method: "channels",
 		Params: map[string]interface{}{},
@@ -282,6 +296,7 @@ func (c *Client) AddChannels() error {
 func (c *Client) AddStats() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	cmd := Command{
 		Method: "stats",
 		Params: map[string]interface{}{},
@@ -299,16 +314,20 @@ func (c *Client) Publish(channel string, data []byte) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	result, err := c.Send()
 	if err != nil {
 		return false, err
 	}
+
 	resp := result[0]
 	if resp.Error != "" {
 		return false, errors.New(resp.Error)
 	}
+
 	return DecodePublish(resp.Body)
 }
 
@@ -322,16 +341,20 @@ func (c *Client) PublishClient(channel string, data []byte, client string) (bool
 	if err != nil {
 		return false, err
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	result, err := c.Send()
 	if err != nil {
 		return false, err
 	}
+
 	resp := result[0]
 	if resp.Error != "" {
 		return false, errors.New(resp.Error)
 	}
+
 	return DecodePublish(resp.Body)
 }
 
@@ -344,8 +367,10 @@ func (c *Client) Broadcast(channels []string, data []byte) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	result, err := c.Send()
 	if err != nil {
 		return false, err
@@ -366,8 +391,10 @@ func (c *Client) BroadcastClient(channels []string, data []byte, client string) 
 	if err != nil {
 		return false, err
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	result, err := c.Send()
 	if err != nil {
 		return false, err
@@ -389,8 +416,10 @@ func (c *Client) Unsubscribe(channel, user string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	result, err := c.Send()
 	if err != nil {
 		return false, err
@@ -412,8 +441,10 @@ func (c *Client) Disconnect(user string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	result, err := c.Send()
 	if err != nil {
 		return false, err
@@ -435,8 +466,10 @@ func (c *Client) Presence(channel string) (map[string]ClientInfo, error) {
 	if err != nil {
 		return map[string]ClientInfo{}, err
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	result, err := c.Send()
 	if err != nil {
 		return map[string]ClientInfo{}, err
@@ -458,8 +491,10 @@ func (c *Client) History(channel string) ([]Message, error) {
 	if err != nil {
 		return []Message{}, err
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	result, err := c.Send()
 	if err != nil {
 		return []Message{}, err
@@ -481,8 +516,10 @@ func (c *Client) Channels() ([]string, error) {
 	if err != nil {
 		return []string{}, err
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	result, err := c.Send()
 	if err != nil {
 		return []string{}, err
@@ -503,8 +540,10 @@ func (c *Client) Stats() (Stats, error) {
 	if err != nil {
 		return Stats{}, err
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	result, err := c.Send()
 	if err != nil {
 		return Stats{}, err
@@ -590,13 +629,16 @@ func DecodePresence(body []byte) (map[string]ClientInfo, error) {
 func (c *Client) Send() (Result, error) {
 	cmds := c.cmds
 	c.cmds = []Command{}
+
 	result, err := c.send(cmds)
 	if err != nil {
 		return Result{}, err
 	}
+
 	if len(result) != len(cmds) {
 		return Result{}, ErrMalformedResponse
 	}
+
 	return result, nil
 }
 
@@ -606,8 +648,6 @@ func (c *Client) send(cmds []Command) (Result, error) {
 		return Result{}, err
 	}
 
-	client := &http.Client{}
-	client.Timeout = c.Timeout
 	r, err := http.NewRequest("POST", c.Endpoint, bytes.NewBuffer(data))
 	if err != nil {
 		return Result{}, err
@@ -618,20 +658,40 @@ func (c *Client) send(cmds []Command) (Result, error) {
 	}
 	r.Header.Set("Content-Type", "application/json")
 
-	resp, err := client.Do(r)
+	resp, err := c.client.Do(r)
 	if err != nil {
 		return Result{}, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		return Result{}, errors.New("wrong status code: " + resp.Status)
 	}
 
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-
 	var result Result
+	body, err := ioutil.ReadAll(resp.Body)
 	err = json.Unmarshal(body, &result)
+
 	return result, err
+}
+
+// Lock must be held outside this method.
+func (c *Client) add(cmd Command) error {
+	uid, err := uuid.NewV4()
+	if err != nil {
+		return err
+	}
+
+	cmd.UID = uid.String()
+	c.cmds = append(c.cmds, cmd)
+	return nil
+}
+
+func (c *Client) empty() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return len(c.cmds) == 0
 }
 
 // GenerateClientToken generates client token based on secret key and provided

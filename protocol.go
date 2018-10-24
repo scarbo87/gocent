@@ -1,7 +1,7 @@
 package gocent
 
 import (
-	"encoding/json"
+	json "github.com/json-iterator/go"
 )
 
 // Command represents API command to send.
