@@ -71,6 +71,7 @@ type Client struct {
 	Timeout  time.Duration
 
 	mu       sync.RWMutex
+	muCmds       sync.RWMutex
 	cmds     []Command
 	insecure bool
 	client   *http.Client
@@ -148,8 +149,8 @@ func (c *Client) Reset() {
 // AddPublish adds publish command to client command buffer but not actually
 // send it until Send method explicitly called.
 func (c *Client) AddPublish(channel string, data []byte) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.muCmds.Lock()
+	defer c.muCmds.Unlock()
 
 	var raw json.RawMessage
 	raw = json.RawMessage(data)
@@ -166,8 +167,8 @@ func (c *Client) AddPublish(channel string, data []byte) error {
 // AddPublishClient adds publish command to client command buffer but not actually
 // send it until Send method explicitly called.
 func (c *Client) AddPublishClient(channel string, data []byte, client string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.muCmds.Lock()
+	defer c.muCmds.Unlock()
 
 	var raw json.RawMessage
 	raw = json.RawMessage(data)
@@ -185,8 +186,8 @@ func (c *Client) AddPublishClient(channel string, data []byte, client string) er
 // AddBroadcast adds broadcast command to client command buffer but not actually
 // send it until Send method explicitly called.
 func (c *Client) AddBroadcast(channels []string, data []byte) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.muCmds.Lock()
+	defer c.muCmds.Unlock()
 
 	var raw json.RawMessage
 	raw = json.RawMessage(data)
@@ -203,8 +204,8 @@ func (c *Client) AddBroadcast(channels []string, data []byte) error {
 // AddBroadcastClient adds broadcast command to client command buffer but not actually
 // send it until Send method explicitly called.
 func (c *Client) AddBroadcastClient(channels []string, data []byte, client string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.muCmds.Lock()
+	defer c.muCmds.Unlock()
 
 	var raw json.RawMessage
 	raw = json.RawMessage(data)
@@ -222,8 +223,8 @@ func (c *Client) AddBroadcastClient(channels []string, data []byte, client strin
 // AddUnsubscribe adds unsubscribe command to client command buffer but not actually
 // send it until Send method explicitly called.
 func (c *Client) AddUnsubscribe(channel string, user string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.muCmds.Lock()
+	defer c.muCmds.Unlock()
 
 	cmd := Command{
 		Method: "unsubscribe",
@@ -238,8 +239,8 @@ func (c *Client) AddUnsubscribe(channel string, user string) error {
 // AddDisconnect adds disconnect command to client command buffer but not actually
 // send it until Send method explicitly called.
 func (c *Client) AddDisconnect(user string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.muCmds.Lock()
+	defer c.muCmds.Unlock()
 
 	cmd := Command{
 		Method: "disconnect",
@@ -253,8 +254,8 @@ func (c *Client) AddDisconnect(user string) error {
 // AddPresence adds presence command to client command buffer but not actually
 // send it until Send method explicitly called.
 func (c *Client) AddPresence(channel string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.muCmds.Lock()
+	defer c.muCmds.Unlock()
 
 	cmd := Command{
 		Method: "presence",
@@ -268,8 +269,8 @@ func (c *Client) AddPresence(channel string) error {
 // AddHistory adds history command to client command buffer but not actually
 // send it until Send method explicitly called.
 func (c *Client) AddHistory(channel string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.muCmds.Lock()
+	defer c.muCmds.Unlock()
 
 	cmd := Command{
 		Method: "history",
@@ -283,8 +284,8 @@ func (c *Client) AddHistory(channel string) error {
 // AddChannels adds channels command to client command buffer but not actually
 // send it until Send method explicitly called.
 func (c *Client) AddChannels() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.muCmds.Lock()
+	defer c.muCmds.Unlock()
 
 	cmd := Command{
 		Method: "channels",
@@ -296,8 +297,8 @@ func (c *Client) AddChannels() error {
 // AddStats adds stats command to client command buffer but not actually
 // send it until Send method explicitly called.
 func (c *Client) AddStats() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.muCmds.Lock()
+	defer c.muCmds.Unlock()
 
 	cmd := Command{
 		Method: "stats",
@@ -312,13 +313,14 @@ func (c *Client) Publish(channel string, data []byte) (bool, error) {
 	if !c.empty() {
 		return false, ErrClientNotEmpty
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.AddPublish(channel, data)
 	if err != nil {
 		return false, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	result, err := c.Send()
 	if err != nil {
@@ -339,13 +341,14 @@ func (c *Client) PublishClient(channel string, data []byte, client string) (bool
 	if !c.empty() {
 		return false, ErrClientNotEmpty
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.AddPublishClient(channel, data, client)
 	if err != nil {
 		return false, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	result, err := c.Send()
 	if err != nil {
@@ -365,13 +368,14 @@ func (c *Client) Broadcast(channels []string, data []byte) (bool, error) {
 	if !c.empty() {
 		return false, ErrClientNotEmpty
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.AddBroadcast(channels, data)
 	if err != nil {
 		return false, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	result, err := c.Send()
 	if err != nil {
@@ -389,13 +393,14 @@ func (c *Client) BroadcastClient(channels []string, data []byte, client string) 
 	if !c.empty() {
 		return false, ErrClientNotEmpty
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.AddBroadcastClient(channels, data, client)
 	if err != nil {
 		return false, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	result, err := c.Send()
 	if err != nil {
@@ -414,13 +419,14 @@ func (c *Client) Unsubscribe(channel, user string) (bool, error) {
 	if !c.empty() {
 		return false, ErrClientNotEmpty
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.AddUnsubscribe(channel, user)
 	if err != nil {
 		return false, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	result, err := c.Send()
 	if err != nil {
@@ -439,13 +445,14 @@ func (c *Client) Disconnect(user string) (bool, error) {
 	if !c.empty() {
 		return false, ErrClientNotEmpty
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.AddDisconnect(user)
 	if err != nil {
 		return false, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	result, err := c.Send()
 	if err != nil {
@@ -464,13 +471,14 @@ func (c *Client) Presence(channel string) (map[string]ClientInfo, error) {
 	if !c.empty() {
 		return map[string]ClientInfo{}, ErrClientNotEmpty
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.AddPresence(channel)
 	if err != nil {
 		return map[string]ClientInfo{}, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	result, err := c.Send()
 	if err != nil {
@@ -489,13 +497,14 @@ func (c *Client) History(channel string) ([]Message, error) {
 	if !c.empty() {
 		return []Message{}, ErrClientNotEmpty
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.AddHistory(channel)
 	if err != nil {
 		return []Message{}, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	result, err := c.Send()
 	if err != nil {
@@ -514,13 +523,14 @@ func (c *Client) Channels() ([]string, error) {
 	if !c.empty() {
 		return []string{}, ErrClientNotEmpty
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.AddChannels()
 	if err != nil {
 		return []string{}, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	result, err := c.Send()
 	if err != nil {
@@ -538,13 +548,14 @@ func (c *Client) Stats() (Stats, error) {
 	if !c.empty() {
 		return Stats{}, ErrClientNotEmpty
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.AddStats()
 	if err != nil {
 		return Stats{}, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	result, err := c.Send()
 	if err != nil {
